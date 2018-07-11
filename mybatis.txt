@@ -1,0 +1,199 @@
+mybatis总结
+	helloworld
+		SqlSession对象代表和数据库的一次会话
+		第一种方式sqlSession.selectOne()
+		接口编程 获取的是代理类
+	全局配置文件
+		configuration 配置
+			• properties 属性
+			• settings 设置
+				mapUnderscoreToCamelCase 开启驼峰命名 查询出的列映射到java bean 根据驼峰
+				cacheEnabled 配置开启二级缓存 默认开启
+				defaultExecutorType 配置默认的执行器。SIMPLE 就是普通的执行器；REUSE 执行器会重用预处理语句（prepared statements）； BATCH 执行器将重用语句并执行批量更新。
+			• typeAliases 类型命名  
+			• typeHandlers 类型处理器 例如日期注册器
+			• objectFactory 对象工厂
+			• plugins 插件 为四大对象配置插件
+			• environments 环境
+			• environment 环境变量
+			• transactionManager 事务管理器
+			• dataSource 数据源
+			• databaseIdProvider 数据库厂商标识
+			• mappers 映射器
+	映射文件
+		cache –命名空间的二级缓存配置
+			•cache-ref – 其他命名空间缓存配置的引用。
+			•resultMap – 自定义结果集映射
+			•parameterMap – 已废弃！老式风格的参数映射
+			•sql –抽取可重用语句块。
+			•insert – 映射插入语句
+			•update – 映射更新语句
+			•delete – 映射删除语句
+			•select – 映射查询语句
+		curd标签对应的属性
+			parameterType 可省略
+			flushCache 清空一级缓存和二级缓存 增删改默认是true
+			statementType 默认是PreparedStatement 
+			useGeneratedKey 针对insert和update标签 调用jdbc底层的getGenerateKeys方法 用于获取自增的主键 如mysql，sql server
+			keyProperty 指定自增主键对应的属性
+			dataBaseId 加载对应的数据库
+		获取插入后对象的主键 对于mysql 使用useGeneratedKey即可 对于oracle不是自增的 则使用selectKey标签 利用序列生成 order=before 执行后再执行插入语句
+		入参类型 
+			·单个参数：基本类型、对象类型、集合类型、数组类型 无需设置parameterType 直接获取
+			多个参数：mybatis会封装成一个map map的key是param1,param2 ...
+			命名参数：@Param 指定的值会添加进map中
+			map：多个参数可以自己手动封装成map 直接传递
+		参数位置可以设置的属性：javaType(可以不设)、 jdbcType(oracle中用于为null时需要设置)、 mode(in out 用于存储过程)、
+			numericScale、resultMap、 typeHandler()、 jdbcTypeName
+			jdbcTypeForNull默认是OTHER oracle对于mybatis的null不认识 需要修改jdbcTypeForNull为NULL或者设置jdbcType为NULL
+		返回类型
+			1、mybatis允许增删改直接定义以下类型返回值 Integer、Long、Boolean、void 
+			2.返回类型可以是一个map  Map<String, Employee> key默认是id，可以用@MapKey指定key Employee是查询语句返回的对象
+			
+		#{} 预编译到sql中 安全
+		${} 获取参数的值 拼接到sql中 可能会sql注入
+		原生jdbc不能设置？也就是不支持占位符的地方只能用${} 如分表 排序 order by 分表就是表名动态设置
+		
+		association
+		collection
+		
+	动态sql
+		if
+		choose(when other)
+		trim(where set)
+		foreach
+		ognl表达式 属性 方法 运算符 静态属性 @java.lang.Math@PI 集合的伪属性 size等
+		
+	缓存
+		一级缓存 sqlSession级别的 本地缓存 默认开启
+		二级缓存 基于namespace级别的 需要手动开启和配置
+		mybatis定义了Cache接口 支持我们自己实现二级缓存 myabatis本身有支持redis，memcached缓存
+		localSessionScope可以配置一级缓存的范围
+		同一个sqlsession查询过的数据都会保存在一级缓存中 其实就是一个Map 
+		一级缓存失效的情况
+			不同的sqlsession执行同一个查询
+			查询的条件不同
+			查询后执行了增删改
+			两次查询期间手动清空了缓存
+		二级缓存
+			二级缓存会要求pojo实现了序列化接口
+			二级缓存会在sqlsession关闭后才生效
+		useCache flushCache 查询数据时  先查询二级缓存 在查询一级缓存 最后查数据库
+	结合spring
+		配置SqlSessionFactoryBean 来生成SqlSessionFactory 
+		配置自动扫描接口  mybatis-spring:scan
+		由spring来管理组件 配置事务 还可以配置一个批量执行的sqlSession利用org.mybatis.spring.SqlSessionTemplate
+		
+	逆向工程
+		mybatis generator 官方的逆向工程 主要生成配置文件根据表 官方文档http://www.mybatis.org/generator/
+	原理
+		1.入口：
+		String resource = "mybatis-config.xml";
+		InputStream inputStream = Resources.getResourceAsStream(resource);
+		return new SqlSessionFactoryBuilder().build(inputStream);
+		SqlSessionFactory sqlSessionFactory = getSqlSessionFactory();
+		// 2、获取sqlSession对象
+		SqlSession openSession = sqlSessionFactory.openSession();
+		try {
+			// 3、获取接口的实现类对象
+			//会为接口自动的创建一个代理对象，代理对象去执行增删改查方法
+			EmployeeMapper mapper = openSession.getMapper(EmployeeMapper.class);
+			Employee employee = mapper.getEmpById(1);
+			System.out.println(mapper);
+			System.out.println(employee);
+		} finally {
+			openSession.close();
+		}
+	2，获取SqlSessionFactory对象	
+		配置文件构建inputstream流 
+		通过XMLConfigBuilder parse方法解析mybatis的主配置文件的内容 解析后放入Configuration对象中
+		通过XMLMapperBuilder parse方法解析mybatis的映射文件的内容 解析后放入Configuration对象中
+		 cl.getResourceAsStream
+		最后通过bulid方法得到 DefaultSqlSessionFactory对象
+		其中 SqlSessionFactory 用于获取的session的工厂 有以下几个重载方法
+			  SqlSession openSession();
+			  SqlSession openSession(boolean autoCommit);
+			  SqlSession openSession(Connection connection);
+			  SqlSession openSession(TransactionIsolationLevel level);
+			  SqlSession openSession(ExecutorType execType);
+			  SqlSession openSession(ExecutorType execType, boolean autoCommit);
+			  SqlSession openSession(ExecutorType execType, TransactionIsolationLevel level);
+			  SqlSession openSession(ExecutorType execType, Connection connection);
+			  Configuration getConfiguration();
+	3.获取SqlSession对象
+		先获取Executor对象---CachingExecutor 获取后用拦截器包装
+		openSession()--->  openSessionFromDataSource(ExecutorType execType, TransactionIsolationLevel level, boolean autoCommit)
+			通过Enviroment对象和TransactionFactory得到的Transaction对象得到Executor 
+			configuration.newExecutor(tx, execType)--BaseExecutor封装的CachingExecutor对象
+			得到Executor对象后 构建DefaultSqlSession对象---》			
+			new DefaultSqlSession(configuration, executor, autoCommit)
+	4.获取mapper对象
+		org.apache.ibatis.binding.MapperRegistry.getMapper
+			得到 MapperProxyFactory对象  MapperProxy代理对象 利用动态代理Proxy.newProxyInstance 获取Mapper代理对象 其实是MapperProxy
+			org.apache.ibatis.binding.MapperProxy@158a8276
+	5.做具体的curd
+		调用mapper.getById()方法 实际上是调用MapperProxy的invoke方法 利用动态代理 构建MapperMethod
+		MapperMethod内部构建SqlCommand对象 内部构建MapperStatement MethodSignature该类包装了方法的特性 返回类型等
+		创建好了对象执行方法mapperMethod.execute(sqlSession, args);   method.convertArgsToSqlCommandParam(args);
+		 public Object getNamedParams(Object[] args) {
+			final int paramCount = names.size();//参数的数量
+			if (args == null || paramCount == 0) {
+			  return null;
+			} else if (!hasParamAnnotation && paramCount == 1) {//无Param注解 或者数量为1
+			  return args[names.firstKey()];直接返回
+			} else {
+			  final Map<String, Object> param = new ParamMap<Object>();否则构建一个map
+			  int i = 0;
+			  for (Map.Entry<Integer, String> entry : names.entrySet()) {
+				param.put(entry.getValue(), args[entry.getKey()]);//将names的键和值放入map中 在加上param1..
+				// add generic param names (param1, param2, ...)
+				final String genericParamName = GENERIC_NAME_PREFIX + String.valueOf(i + 1);
+				// ensure not to overwrite parameter named with @Param
+				if (!names.containsValue(genericParamName)) {
+				  param.put(genericParamName, args[entry.getKey()]);
+				}
+				i++;
+			  }
+			  return param;
+			}
+  }
+	result = sqlSession.selectOne(command.getName(), param);
+	BoundSql
+	 this.sql = sql;//执行的sql
+	 this.parameterMappings = parameterMappings;//select标签上设置的参数
+	 this.parameterObject = parameterObject;//参数对象
+	 StatementHandler
+	  statementHandler = (StatementHandler) interceptorChain.pluginAll(statementHandler);//插件
+	   protected BaseStatementHandler(Executor executor, MappedStatement mappedStatement, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) {
+	this.configuration = mappedStatement.getConfiguration();
+	this.executor = executor;
+	this.mappedStatement = mappedStatement;
+	this.rowBounds = rowBounds;
+
+	this.typeHandlerRegistry = configuration.getTypeHandlerRegistry();
+	this.objectFactory = configuration.getObjectFactory();
+
+	if (boundSql == null) { // issue #435, get the key before calculating the statement
+	  generateKeys(parameterObject);
+	  boundSql = mappedStatement.getBoundSql(parameterObject);
+	}
+
+	this.boundSql = boundSql;
+
+	this.parameterHandler = configuration.newParameterHandler(mappedStatement, parameterObject, boundSql);
+	this.resultSetHandler = configuration.newResultSetHandler(executor, mappedStatement, rowBounds, parameterHandler, resultHandler, boundSql);
+  }
+	TypeHandler
+	
+	 PreparedStatement ps = (PreparedStatement) statement;
+	ps.execute();
+	return resultSetHandler.<E> handleResultSets(ps);
+	插件
+	
+   
+   
+	
+	
+	
+	
+	
